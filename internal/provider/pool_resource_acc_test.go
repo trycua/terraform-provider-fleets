@@ -30,6 +30,7 @@ import (
 )
 
 var poolGVR = schema.GroupVersionResource{Group: "cua.ai", Version: "v1", Resource: "osgymworkspacepools"}
+var claimGVR = schema.GroupVersionResource{Group: "osgym.cua.ai", Version: "v1alpha1", Resource: "osgymsandboxclaims"}
 
 func TestAccPoolLifecycle(t *testing.T) {
 	if os.Getenv("TF_ACC") == "" {
@@ -38,9 +39,13 @@ func TestAccPoolLifecycle(t *testing.T) {
 	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
 		t.Skip("KUBEBUILDER_ASSETS must point to envtest binaries")
 	}
+	crdDirectory := os.Getenv("FLEETS_CRD_DIR")
+	if crdDirectory == "" {
+		t.Skip("FLEETS_CRD_DIR must point to the directory containing the Fleet CRDs")
+	}
 
 	testEnvironment := &envtest.Environment{
-		CRDDirectoryPaths:     []string{"../../../rbac-e2e/testdata"},
+		CRDDirectoryPaths:     []string{crdDirectory},
 		ErrorIfCRDPathMissing: true,
 	}
 	config, err := testEnvironment.Start()
@@ -86,17 +91,20 @@ provider "fleets" {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + poolConfig(1, "4Gi"),
+				Config: providerConfig + poolConfig(1, "4Gi") + claimConfig(),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("fleets_pool.test", "name", "terraform-e2e"),
 					resource.TestCheckResourceAttr("fleets_pool.test", "namespace", "terraform-e2e"),
 					resource.TestCheckResourceAttr("fleets_pool.test", "replicas", "1"),
 					resource.TestCheckResourceAttr("fleets_pool.test", "service.#", "1"),
 					resource.TestCheckResourceAttr("fleets_pool.test", "autoscaling.max_pool_size", "5"),
+					resource.TestCheckResourceAttr("fleets_claim.test", "phase", "Bound"),
+					resource.TestCheckResourceAttr("fleets_claim.test", "sandbox_name", "terraform-claim-sandbox"),
+					resource.TestCheckResourceAttr("fleets_claim.test", "sandbox_service", "terraform-claim-sandbox.terraform-e2e.svc.cluster.local"),
 				),
 			},
 			{
-				Config: providerConfig + poolConfig(2, "8Gi"),
+				Config: providerConfig + poolConfig(2, "8Gi") + claimConfig(),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("fleets_pool.test", "replicas", "2"),
 					resource.TestCheckResourceAttr("fleets_pool.test", "memory", "8Gi"),
@@ -106,6 +114,12 @@ provider "fleets" {
 				ResourceName:      "fleets_pool.test",
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+			{
+				ResourceName:      "fleets_claim.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateId:     "terraform-e2e/terraform-claim",
 			},
 		},
 	})
@@ -133,6 +147,15 @@ resource "fleets_pool" "test" {
   }
 }
 `, replicas, memory)
+}
+
+func claimConfig() string {
+	return `
+resource "fleets_claim" "test" {
+  pool_name = fleets_pool.test.name
+  claim_name = "terraform-claim"
+}
+`
 }
 
 func newCyclopsTestServer(t *testing.T, clientset *kubernetes.Clientset, dynamicClient dynamic.Interface) *httptest.Server {
@@ -172,18 +195,33 @@ func newCyclopsTestServer(t *testing.T, clientset *kubernetes.Clientset, dynamic
 			return
 		}
 
-		const prefix = "/api/k8s/apis/cua.ai/v1/namespaces/"
-		if !strings.HasPrefix(r.URL.Path, prefix) {
+		const poolPrefix = "/api/k8s/apis/cua.ai/v1/namespaces/"
+		const claimPrefix = "/api/k8s/apis/osgym.cua.ai/v1alpha1/namespaces/"
+		var resourceGVR schema.GroupVersionResource
+		var resourceName string
+		var claimResource bool
+		path := ""
+		switch {
+		case strings.HasPrefix(r.URL.Path, poolPrefix):
+			path = strings.TrimPrefix(r.URL.Path, poolPrefix)
+			resourceGVR = poolGVR
+			resourceName = "osgymworkspacepools"
+		case strings.HasPrefix(r.URL.Path, claimPrefix):
+			path = strings.TrimPrefix(r.URL.Path, claimPrefix)
+			resourceGVR = claimGVR
+			resourceName = "osgymsandboxclaims"
+			claimResource = true
+		default:
 			http.NotFound(w, r)
 			return
 		}
-		parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
-		if len(parts) < 2 || parts[1] != "osgymworkspacepools" {
+		parts := strings.Split(path, "/")
+		if len(parts) < 2 || parts[1] != resourceName {
 			http.NotFound(w, r)
 			return
 		}
 		namespace := parts[0]
-		pools := dynamicClient.Resource(poolGVR).Namespace(namespace)
+		resources := dynamicClient.Resource(resourceGVR).Namespace(namespace)
 		switch {
 		case r.Method == http.MethodPost && len(parts) == 2:
 			var object unstructured.Unstructured
@@ -191,21 +229,41 @@ func newCyclopsTestServer(t *testing.T, clientset *kubernetes.Clientset, dynamic
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			created, err := pools.Create(ctx, &object, metav1.CreateOptions{})
+			created, err := resources.Create(ctx, &object, metav1.CreateOptions{})
 			writeKubernetesResult(w, http.StatusCreated, created, err)
 		case r.Method == http.MethodGet && len(parts) == 3:
-			object, err := pools.Get(ctx, parts[2], metav1.GetOptions{})
+			object, err := resources.Get(ctx, parts[2], metav1.GetOptions{})
+			if err == nil && claimResource {
+				object.Object["status"] = map[string]any{
+					"phase": "Bound",
+					"sandbox": map[string]any{
+						"name":    parts[2] + "-sandbox",
+						"service": parts[2] + "-sandbox." + namespace + ".svc.cluster.local",
+					},
+				}
+			}
 			writeKubernetesResult(w, http.StatusOK, object, err)
-		case r.Method == http.MethodPatch && len(parts) == 3:
+		case r.Method == http.MethodPatch && len(parts) == 3 && !claimResource:
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			object, err := pools.Patch(ctx, parts[2], types.MergePatchType, body, metav1.PatchOptions{})
+			object, err := resources.Patch(ctx, parts[2], types.MergePatchType, body, metav1.PatchOptions{})
 			writeKubernetesResult(w, http.StatusOK, object, err)
 		case r.Method == http.MethodDelete && len(parts) == 3:
-			err := pools.Delete(ctx, parts[2], metav1.DeleteOptions{})
+			if !claimResource {
+				claims, err := dynamicClient.Resource(claimGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+				if err != nil {
+					writeKubernetesResult(w, http.StatusInternalServerError, nil, err)
+					return
+				}
+				if len(claims.Items) != 0 {
+					writeJSON(w, http.StatusConflict, map[string]string{"error": "claims must be released before deleting a pool"})
+					return
+				}
+			}
+			err := resources.Delete(ctx, parts[2], metav1.DeleteOptions{})
 			writeKubernetesResult(w, http.StatusNoContent, nil, err)
 		default:
 			http.NotFound(w, r)

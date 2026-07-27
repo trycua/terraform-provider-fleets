@@ -1,12 +1,12 @@
 ---
 page_title: "Provider: Fleets"
 description: |-
-  Manage Cua Fleet computer-use pools with Terraform.
+  Manage Cua Fleet computer-use pools and single-sandbox claims with Terraform.
 ---
 
 # Fleets Provider
 
-The Fleets provider creates and manages tenant-scoped computer-use pools through the Fleet API.
+The Fleets provider creates and manages tenant-scoped computer-use pools and claims through the Fleet API.
 
 ```terraform
 terraform {

@@ -72,7 +72,7 @@ func (p *fleetsProvider) Configure(ctx context.Context, req provider.ConfigureRe
 }
 
 func (p *fleetsProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewPoolResource, NewLegacyPoolResource}
+	return []func() resource.Resource{NewPoolResource, NewLegacyPoolResource, NewClaimResource}
 }
 
 func (p *fleetsProvider) DataSources(_ context.Context) []func() datasource.DataSource { return nil }

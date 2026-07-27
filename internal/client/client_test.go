@@ -126,3 +126,65 @@ func TestCreatePoolReusesExistingNamespace(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClaimLifecycle(t *testing.T) {
+	t.Parallel()
+
+	var created Claim
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer token" {
+			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+		switch r.Method + " " + r.URL.Path {
+		case "POST /api/k8s/apis/osgym.cua.ai/v1alpha1/namespaces/fixed-gvisor/osgymsandboxclaims":
+			if err := json.NewDecoder(r.Body).Decode(&created); err != nil {
+				t.Fatal(err)
+			}
+			created.Metadata.Namespace = "fixed-gvisor"
+			created.Status = ClaimStatus{Phase: "Bound", Sandbox: ClaimSandbox{Name: "sandbox-1", Service: "sandbox-1.fixed-gvisor.svc.cluster.local"}}
+			_ = json.NewEncoder(w).Encode(created)
+		case "GET /api/k8s/apis/osgym.cua.ai/v1alpha1/namespaces/fixed-gvisor/osgymsandboxclaims/claim-1":
+			_ = json.NewEncoder(w).Encode(created)
+		case "DELETE /api/k8s/apis/osgym.cua.ai/v1alpha1/namespaces/fixed-gvisor/osgymsandboxclaims/claim-1":
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	api, err := New(Config{Endpoint: server.URL, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := api.CreateClaim(context.Background(), "fixed-gvisor", "claim-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claim.APIVersion != "osgym.cua.ai/v1alpha1" || claim.Kind != "OSGymSandboxClaim" {
+		t.Fatalf("unexpected claim type: %#v", claim)
+	}
+	if claim.Spec.SandboxTemplateRef.Name != "fixed-gvisor-template" {
+		t.Fatalf("template ref = %q, want fixed-gvisor-template", claim.Spec.SandboxTemplateRef.Name)
+	}
+	claim, err = api.GetClaim(context.Background(), "fixed-gvisor", "claim-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claim.Status.Phase != "Bound" || claim.Status.Sandbox.Service == "" {
+		t.Fatalf("unexpected claim status: %#v", claim.Status)
+	}
+	if err := api.DeleteClaim(context.Background(), "fixed-gvisor", "claim-1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIsTransient(t *testing.T) {
+	if !IsTransient(&APIError{StatusCode: http.StatusServiceUnavailable}) {
+		t.Fatal("503 should be transient")
+	}
+	if IsTransient(&APIError{StatusCode: http.StatusBadRequest}) {
+		t.Fatal("400 should not be transient")
+	}
+}
