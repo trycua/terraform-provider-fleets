@@ -182,7 +182,7 @@
           "name": "max_pool_size",
           "go_name": "MaxPoolSize",
           "value_type": "int64",
-          "mode": "required",
+          "mode": "optional",
           "crd_path": "maxPoolSize"
         }
       ],
