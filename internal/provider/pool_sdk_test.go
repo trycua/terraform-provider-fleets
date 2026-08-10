@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/trycua/cloud/cyclops-cs/sdk-bindings/go-uniffi/cyclops_sdk_schema"
 	"github.com/trycua/cloud/cyclops-cs/sdk-bindings/go-uniffi/fleet_sdk"
@@ -24,6 +26,35 @@ func examplePoolModel() poolResourceModel {
 		Firmware:           types.StringValue("bios"),
 		Services:           types.SetNull(types.ObjectType{AttrTypes: serviceObjectType()}),
 		Autoscaling:        types.ObjectNull(autoscalingObjectType()),
+	}
+}
+
+func TestAutoscalingBlockCanBeOmitted(t *testing.T) {
+	block, ok := poolResourceSchema().Blocks["autoscaling"].(resourceschema.SingleNestedBlock)
+	if !ok {
+		t.Fatal("autoscaling schema is not a single nested block")
+	}
+	maxPoolSize, ok := block.Attributes["max_pool_size"].(resourceschema.Int64Attribute)
+	if !ok {
+		t.Fatal("max_pool_size schema is not an int64 attribute")
+	}
+	if !maxPoolSize.Optional || maxPoolSize.Required {
+		t.Fatalf("max_pool_size optional=%t required=%t, want optional only", maxPoolSize.Optional, maxPoolSize.Required)
+	}
+}
+
+func TestAutoscalingBlockRequiresMaxPoolSizeWhenEnabled(t *testing.T) {
+	model := examplePoolModel()
+	model.Autoscaling = types.ObjectValueMust(autoscalingObjectType(), map[string]attr.Value{
+		"min_pool_size":     types.Int64Value(0),
+		"initial_pool_size": types.Int64Value(0),
+		"max_pool_size":     types.Int64Null(),
+	})
+
+	var diagnostics diag.Diagnostics
+	model.toSDKPoolSpec(context.Background(), &diagnostics)
+	if !diagnostics.HasError() {
+		t.Fatal("toSDKPoolSpec() accepted autoscaling without max_pool_size")
 	}
 }
 

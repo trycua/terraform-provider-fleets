@@ -226,11 +226,18 @@ func (m poolResourceModel) toSDKPoolSpec(ctx context.Context, diagnostics *diag.
 	var autoscaling *cyclops_sdk_schema.WarmPoolAutoscaling
 	var autoscalingValue autoscalingModel
 	if objectValue(ctx, m.Autoscaling, &autoscalingValue, diagnostics) {
-		minPoolSize := uint32(autoscalingValue.MinPoolSize.ValueInt64())
-		initialPoolSize := uint32(autoscalingValue.InitialPoolSize.ValueInt64())
-		maxPoolSize := uint32(autoscalingValue.MaxPoolSize.ValueInt64())
-		autoscaling = &cyclops_sdk_schema.WarmPoolAutoscaling{
-			MinPoolSize: &minPoolSize, InitialPoolSize: &initialPoolSize, MaxPoolSize: &maxPoolSize,
+		if autoscalingValue.MaxPoolSize.IsNull() || autoscalingValue.MaxPoolSize.IsUnknown() {
+			diagnostics.AddError(
+				"Invalid autoscaling configuration",
+				"max_pool_size must be configured when autoscaling is enabled.",
+			)
+		} else {
+			minPoolSize := uint32(autoscalingValue.MinPoolSize.ValueInt64())
+			initialPoolSize := uint32(autoscalingValue.InitialPoolSize.ValueInt64())
+			maxPoolSize := uint32(autoscalingValue.MaxPoolSize.ValueInt64())
+			autoscaling = &cyclops_sdk_schema.WarmPoolAutoscaling{
+				MinPoolSize: &minPoolSize, InitialPoolSize: &initialPoolSize, MaxPoolSize: &maxPoolSize,
+			}
 		}
 	}
 	return cyclops_sdk_schema.OsGymSandboxWarmPoolSpec{
