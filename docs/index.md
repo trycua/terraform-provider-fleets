@@ -6,7 +6,7 @@ description: |-
 
 # Fleets Provider
 
-The Fleets provider creates and manages tenant-scoped computer-use pools through the Fleet API.
+The Fleets provider creates and manages tenant-scoped computer-use pools and GitHub Actions OIDC trust policies through the Fleet API.
 
 ```terraform
 terraform {
@@ -26,3 +26,8 @@ provider "fleets" {
 ```
 
 Use either `access_token`, or all three OAuth user-key fields: `client_id`, `client_secret`, and `token_url`. The corresponding `CYCLOPS_*` environment variables may be used instead.
+
+## Resources
+
+- `fleets_pool` manages a pool, template, and same-named namespace.
+- `fleets_github_trust_policy` grants one GitHub repository access to exact Fleet namespaces.

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	frameworkprovider "github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
 
@@ -21,7 +22,7 @@ func TestMetadataUsesFleetsTypeName(t *testing.T) {
 	}
 }
 
-func TestPoolResourceMetadataIncludesMigrationAlias(t *testing.T) {
+func TestResourceMetadata(t *testing.T) {
 	tests := []struct {
 		name     string
 		resource resource.Resource
@@ -29,6 +30,7 @@ func TestPoolResourceMetadataIncludesMigrationAlias(t *testing.T) {
 	}{
 		{name: "current", resource: NewPoolResource(), want: "fleets_pool"},
 		{name: "legacy", resource: NewLegacyPoolResource(), want: "cyclops_pool"},
+		{name: "github trust policy", resource: NewGitHubTrustPolicyResource(), want: "fleets_github_trust_policy"},
 	}
 
 	for _, test := range tests {
@@ -39,5 +41,15 @@ func TestPoolResourceMetadataIncludesMigrationAlias(t *testing.T) {
 				t.Fatalf("TypeName = %q, want %q", response.TypeName, test.want)
 			}
 		})
+	}
+}
+
+func TestProviderProtocolSchemaIsValid(t *testing.T) {
+	server, err := providerserver.NewProtocol6WithError(New("test")())()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if server == nil {
+		t.Fatal("provider server is nil")
 	}
 }

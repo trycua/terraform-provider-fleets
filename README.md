@@ -1,6 +1,6 @@
 # Terraform Provider for Cua Fleets
 
-This provider manages `OSGymSandboxWarmPool` and `OSGymSandboxTemplate` resources through the Fleet API. It uses the same user-key OAuth credentials and tenant-scoped authorization as the Fleet Python SDK and dashboard.
+This provider manages Fleet computer-use pools and GitHub Actions OIDC trust policies through the Fleet API. It uses the same user-key OAuth credentials and tenant-scoped authorization as the Fleet Python SDK and dashboard.
 
 ## Temporary local installation (until Registry publication)
 
@@ -130,6 +130,8 @@ The provider source address is `trycua/fleets`. One `fleets_pool` is a pair of n
 ## Authentication
 
 Create a user API key in Cua and configure its returned `client_id`, `client_secret`, and `token_url`. For short-lived workflows, `access_token` can be supplied instead.
+
+A `fleets_github_trust_policy` must be created with a user API key or equivalent owner credential. A GitHub WIF token cannot bootstrap its own authorizing policy.
 
 All provider arguments support environment variables:
 
