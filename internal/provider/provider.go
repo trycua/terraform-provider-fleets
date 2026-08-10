@@ -46,7 +46,7 @@ func (p *fleetsProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 
 func (p *fleetsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manage Cua Fleet computer-use pools.",
+		Description: "Manage Cua Fleet computer-use pools and GitHub Actions OIDC trust policies.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint":      schema.StringAttribute{Required: true, Description: "Cyclops base URL, for example https://cyclops.example.com."},
 			"access_token":  schema.StringAttribute{Optional: true, Sensitive: true, Description: "Bearer token. May also be set with CYCLOPS_ACCESS_TOKEN."},
@@ -69,7 +69,7 @@ func (p *fleetsProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		}
 		return os.Getenv(env)
 	}
-	apiClient, err := newCyclopsClient(
+	apiClient, err := newConfiguredClient(
 		value(data.Endpoint, "CYCLOPS_ENDPOINT"),
 		value(data.AccessToken, "CYCLOPS_ACCESS_TOKEN"),
 		value(data.ClientID, "CYCLOPS_CLIENT_ID"),
@@ -85,7 +85,7 @@ func (p *fleetsProvider) Configure(ctx context.Context, req provider.ConfigureRe
 }
 
 func (p *fleetsProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewPoolResource, NewLegacyPoolResource}
+	return []func() resource.Resource{NewPoolResource, NewLegacyPoolResource, NewGitHubTrustPolicyResource}
 }
 
 func (p *fleetsProvider) DataSources(_ context.Context) []func() datasource.DataSource { return nil }

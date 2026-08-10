@@ -24,7 +24,7 @@ import (
 const templateNameSuffix = "-template"
 
 type poolResource struct {
-	client     *fleet_sdk.CyclopsClient
+	client     *configuredClient
 	legacyType bool
 }
 
@@ -46,9 +46,9 @@ func (r *poolResource) Configure(_ context.Context, req resource.ConfigureReques
 	if req.ProviderData == nil {
 		return
 	}
-	apiClient, ok := req.ProviderData.(*fleet_sdk.CyclopsClient)
+	apiClient, ok := req.ProviderData.(*configuredClient)
 	if !ok {
-		resp.Diagnostics.AddError("Unexpected provider data", fmt.Sprintf("expected *fleet_sdk.CyclopsClient, got %T", req.ProviderData))
+		resp.Diagnostics.AddError("Unexpected provider data", fmt.Sprintf("expected *configuredClient, got %T", req.ProviderData))
 		return
 	}
 	r.client = apiClient
