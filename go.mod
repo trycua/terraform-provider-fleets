@@ -103,4 +103,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace github.com/trycua/cloud/cyclops-cs/sdk-bindings/go-uniffi => ../sdk-bindings/go-uniffi
+replace github.com/trycua/cloud/cyclops-cs/sdk-bindings/go-uniffi => ./native/sdk-bindings/go-uniffi
