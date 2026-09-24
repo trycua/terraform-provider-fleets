@@ -74,7 +74,8 @@ pub struct ResolvedImage {
     /// `repo@sha256:…` of the manifest (or index) to run.
     pub pinned_ref: String,
     pub digest: String,
-    /// `rootfs` (docker/gVisor), `containerdisk` (KubeVirt) or `unknown`.
+    /// `rootfs` (docker/gVisor), `containerdisk` (KubeVirt), `lume` (macOS)
+    /// or `unknown`.
     pub variant: String,
     /// The linux/amd64 child manifest digest when the ref is an index.
     #[serde(default)]

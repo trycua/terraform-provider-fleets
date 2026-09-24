@@ -4683,7 +4683,8 @@ type ResolvedImage struct {
 	// `repo@sha256:…` of the manifest (or index) to run.
 	PinnedRef string
 	Digest    string
-	// `rootfs` (docker/gVisor), `containerdisk` (KubeVirt) or `unknown`.
+	// `rootfs` (docker/gVisor), `containerdisk` (KubeVirt), `lume` (macOS)
+	// or `unknown`.
 	Variant string
 	// The linux/amd64 child manifest digest when the ref is an index.
 	PlatformDigest *string
