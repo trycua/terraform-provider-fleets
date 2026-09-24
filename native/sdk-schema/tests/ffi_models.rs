@@ -2,7 +2,7 @@ use cyclops_sdk_schema::{
     Firmware, ImagePullPolicy, JsonValueError, OSGymSandboxClaimCondition,
     OSGymSandboxClaimSandbox, OSGymSandboxClaimStatus, OSGymSandboxStatus,
     OSGymSandboxWarmPoolStatus, OidcConfig, PreservedJson, ProcessMode, RuntimeKind,
-    SandboxService, ServiceProtocol, VmTemplate,
+    SandboxService, SandboxSidecar, ServiceProtocol, VmTemplate,
 };
 use schemars::schema_for;
 use serde_json::json;
@@ -106,6 +106,19 @@ fn vm_template_round_trips_every_known_field() {
         }),
         args: Some(vec!["--port".into(), "8765".into()]),
         env: Some(HashMap::from([("FOO".into(), "bar".into())])),
+        sidecars: Some(vec![SandboxSidecar {
+            name: "proxy".into(),
+            image: "ghcr.io/example/proxy:1".into(),
+            command: Some(vec!["/proxy".into()]),
+            args: Some(vec!["--listen".into(), ":9000".into()]),
+            env: Some(HashMap::from([(
+                "UPSTREAM".into(),
+                "127.0.0.1:8765".into(),
+            )])),
+            ports: Some(vec![9000]),
+            cpu: Some("250m".into()),
+            memory: Some("256Mi".into()),
+        }]),
         claim_secrets: Some(true),
         process_mode: Some(ProcessMode::Run),
     };
@@ -120,6 +133,19 @@ fn vm_template_round_trips_every_known_field() {
     assert_eq!(value["args"], json!(["--port", "8765"]));
     assert_eq!(value["env"], json!({"FOO": "bar"}));
     assert_eq!(value["processMode"], json!("Run"));
+    assert_eq!(
+        value["sidecars"][0],
+        json!({
+            "name": "proxy",
+            "image": "ghcr.io/example/proxy:1",
+            "command": ["/proxy"],
+            "args": ["--listen", ":9000"],
+            "env": {"UPSTREAM": "127.0.0.1:8765"},
+            "ports": [9000],
+            "cpu": "250m",
+            "memory": "256Mi",
+        })
+    );
     assert_eq!(
         serde_json::from_value::<VmTemplate>(value).unwrap(),
         template
@@ -157,6 +183,7 @@ fn minimal_vm_template_omits_none_fields_and_round_trips() {
         oidc: None,
         args: None,
         env: None,
+        sidecars: None,
         claim_secrets: None,
         process_mode: None,
     };
@@ -227,5 +254,19 @@ fn exported_status_records_are_typed_and_round_trip() {
         )
         .unwrap(),
         claim_status
+    );
+}
+
+#[test]
+fn minimal_sidecar_omits_none_fields() {
+    let sidecar: SandboxSidecar = serde_json::from_value(json!({
+        "name": "redis",
+        "image": "redis:7",
+    }))
+    .unwrap();
+    assert_eq!(sidecar.ports, None);
+    assert_eq!(
+        serde_json::to_value(&sidecar).unwrap(),
+        json!({"name": "redis", "image": "redis:7"})
     );
 }

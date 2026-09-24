@@ -63,6 +63,27 @@ pub(crate) fn env_schema(generator: &mut schemars::SchemaGenerator) -> schemars:
     HashMap::<String, String>::json_schema(generator)
 }
 
+fn sidecars_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    Vec::<SandboxSidecar>::json_schema(generator)
+}
+
+fn sidecar_name_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "maxLength": 63,
+        "pattern": SIDECAR_NAME_PATTERN,
+        "description": "Container name, a DNS label unique within the sandbox. \"main\" is reserved for the sandbox container."
+    })
+}
+
+fn sidecar_ports_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "array",
+        "items": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "description": "TCP ports the sidecar listens on. The sandbox reaches the sidecar by name on these ports on every runtime (KubeVirt exposes only these), and vmTemplate.services may target them like any port of the main container."
+    })
+}
+
 /// Name prefix of a tenant-owned registry pull Secret. The /api/k8s gateway
 /// lets a tenant create (and delete) only `kubernetes.io/dockerconfigjson`
 /// Secrets with this prefix, and admits `vmTemplate.imagePullSecret` naming one
@@ -72,6 +93,19 @@ pub const REGISTRY_SECRET_NAME_PREFIX: &str = "cua-registry-";
 
 /// The shared, operator-provisioned ECR pull Secret in every pool namespace.
 pub const SHARED_ECR_PULL_SECRET: &str = "ecr-credentials";
+
+/// Name reserved for the sandbox's own container (the `main` hostname).
+pub const MAIN_CONTAINER_NAME: &str = "main";
+
+/// DNS-label pattern every `vmTemplate.sidecars[].name` must match.
+pub const SIDECAR_NAME_PATTERN: &str = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$";
+
+/// Default CPU request/limit (a Kubernetes quantity) of a sidecar that does
+/// not set `cpu`. Requests equal limits so the pod stays Guaranteed QoS.
+pub const DEFAULT_SIDECAR_CPU: &str = "500m";
+
+/// Default memory request/limit of a sidecar that does not set `memory`.
+pub const DEFAULT_SIDECAR_MEMORY: &str = "512Mi";
 
 pub(crate) fn default_runtime() -> Option<RuntimeKind> {
     Some(RuntimeKind::Kubevirt)
@@ -266,7 +300,7 @@ pub struct VmTemplate {
     #[schemars(default)]
     pub image_pull_policy: Option<ImagePullPolicy>,
     #[schemars(
-        description = "Pull Secret for containerDiskImage, in the pool namespace. Either the shared ecr-credentials Secret (only for the allowlisted ECR repositories) or a tenant-created kubernetes.io/dockerconfigjson Secret named cua-registry-<name> (any registry). Public images need none.",
+        description = "Pull Secret for containerDiskImage and sidecar images, in the pool namespace. Either the shared ecr-credentials Secret (only for the allowlisted ECR repositories) or a tenant-created kubernetes.io/dockerconfigjson Secret named cua-registry-<name> (any registry). Public images need none.",
         schema_with = "string_schema"
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -338,6 +372,14 @@ pub struct VmTemplate {
     #[uniffi(default = None)]
     pub env: Option<HashMap<String, String>>,
     #[schemars(
+        description = "Extra containers next to the sandbox, on every runtime. Each is reachable from the sandbox at its name as a hostname (on its declared ports), and the sandbox from a sidecar at the hostname main; vmTemplate.services may target their ports. They share the imagePullSecret and image admission rules. Pod runtimes (gvisor/macos) run them in the sandbox pod, sharing its network namespace (so localhost works too). KubeVirt runs them in a companion gVisor pod owned by the sandbox and names them in the guest's /etc/hosts through the sandbox's cloud-init (a Linux guest with cloud-init; otherwise use <sandbox>-sidecars.<namespace>.svc.cluster.local); the companion is replaced on return-to-pool. With sidecars, the service names main, sidecars and sc are reserved."
+    )]
+    #[schemars(schema_with = "sidecars_schema")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub sidecars: Option<Vec<SandboxSidecar>>,
+    #[schemars(
         description = "How command, args and env reach the sandbox. Absent or Legacy: unchanged behavior (pod runtimes run them; KubeVirt ignores command and refuses args and env). Run: every runtime runs them with the same semantics. Pod runtimes set them on the sandbox container; KubeVirt writes /etc/cua/env (0600), /etc/cua/command.sh (0700) and cua-command.service into the sandbox's cloud-init Secret, which the guest re-reads on every boot, so warm VMs get it on return-to-pool too. KubeVirt Run needs a Linux guest with cloud-init and systemd.",
         schema_with = "process_mode_schema"
     )]
@@ -345,6 +387,71 @@ pub struct VmTemplate {
     #[schemars(default)]
     #[uniffi(default = None)]
     pub process_mode: Option<ProcessMode>,
+}
+
+/// One extra container next to a sandbox (`vmTemplate.sidecars`).
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    uniffi::Record,
+    uniffi_builder_derive::UniffiBuilder,
+)]
+#[uniffi_builder(crate::SchemaBuildError)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxSidecar {
+    #[schemars(schema_with = "sidecar_name_schema")]
+    pub name: String,
+    #[schemars(description = "Container image ref (same admission rules as containerDiskImage).")]
+    pub image: String,
+    #[schemars(
+        description = "Entrypoint override (replaces the image ENTRYPOINT).",
+        schema_with = "string_list_schema"
+    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub command: Option<Vec<String>>,
+    #[schemars(
+        description = "Arguments (replace the image CMD).",
+        schema_with = "string_list_schema"
+    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub args: Option<Vec<String>>,
+    #[schemars(
+        description = "Plain environment variables (not for secrets).",
+        schema_with = "env_schema"
+    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub env: Option<HashMap<String, String>>,
+    #[schemars(schema_with = "sidecar_ports_schema")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub ports: Option<Vec<u16>>,
+    #[schemars(
+        description = "CPU request and limit, a Kubernetes quantity (default 500m). Requests equal limits so the sandbox pod keeps Guaranteed QoS.",
+        schema_with = "string_schema"
+    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub cpu: Option<String>,
+    #[schemars(
+        description = "Memory request and limit, a Kubernetes quantity (default 512Mi).",
+        schema_with = "string_schema"
+    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(default)]
+    #[uniffi(default = None)]
+    pub memory: Option<String>,
 }
 
 pub(crate) fn date_time_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {

@@ -91,7 +91,7 @@ async fn reconcile_template_keeps_a_pull_secret_the_desired_spec_asks_for() {
 }
 
 /// Reconcile means "make the template exactly this". A desired spec without
-/// a command, args, env or processMode must clear the ones an earlier spec set,
+/// a command, args, env, sidecars or processMode must clear the ones an earlier spec set,
 /// which a merge patch can only say with explicit nulls.
 #[tokio::test]
 async fn reconcile_template_clears_process_fields_the_desired_spec_omits() {
@@ -116,7 +116,7 @@ async fn reconcile_template_clears_process_fields_the_desired_spec_omits() {
     let body: serde_json::Value =
         serde_json::from_slice(requests[1].body.as_deref().unwrap()).unwrap();
     let vm_template = body["spec"]["vmTemplate"].as_object().unwrap();
-    for key in ["command", "args", "env", "processMode"] {
+    for key in ["command", "args", "env", "sidecars", "processMode"] {
         assert_eq!(
             vm_template.get(key),
             Some(&serde_json::Value::Null),
@@ -126,7 +126,7 @@ async fn reconcile_template_clears_process_fields_the_desired_spec_omits() {
 }
 
 #[tokio::test]
-async fn reconcile_template_sends_env_command_and_process_mode_it_asks_for() {
+async fn reconcile_template_sends_env_command_and_sidecars_it_asks_for() {
     let mut request = create_request(None);
     let vm_template = &mut request.spec.vm_template;
     vm_template.command = Some(vec!["python".into(), "-m".into(), "server".into()]);
@@ -135,6 +135,14 @@ async fn reconcile_template_sends_env_command_and_process_mode_it_asks_for() {
         "FOO".into(),
         "bar".into(),
     )]));
+    vm_template.sidecars = Some(vec![
+        cyclops_sdk_schema::SandboxSidecarBuilder::new()
+            .name("redis".into())
+            .image("redis:7".into())
+            .ports(vec![6379])
+            .build()
+            .unwrap(),
+    ]);
     vm_template.process_mode = Some(cyclops_sdk_schema::ProcessMode::Run);
     let http = Arc::new(ScriptedHttpClient::new([
         Ok(token()),
@@ -157,6 +165,10 @@ async fn reconcile_template_sends_env_command_and_process_mode_it_asks_for() {
     );
     assert_eq!(vm_template["args"], serde_json::json!(["--port", "8765"]));
     assert_eq!(vm_template["env"], serde_json::json!({"FOO": "bar"}));
+    assert_eq!(
+        vm_template["sidecars"],
+        serde_json::json!([{"name": "redis", "image": "redis:7", "ports": [6379]}])
+    );
     assert_eq!(vm_template["processMode"], serde_json::json!("Run"));
 }
 

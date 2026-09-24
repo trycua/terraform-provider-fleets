@@ -1,8 +1,9 @@
 use cyclops_sdk_schema::{
     OSGymSandboxTemplateSpec, OSGymSandboxTemplateSpecBuilder, OSGymSandboxWarmPoolSpec,
     OSGymSandboxWarmPoolSpecBuilder, ProcessMode, SandboxService, SandboxServiceBuilder,
-    SandboxTemplateRef, SandboxTemplateRefBuilder, SchemaBuildError, VmTemplate, VmTemplateBuilder,
-    WarmPoolAutoscaling, WarmPoolAutoscalingBuilder,
+    SandboxSidecar, SandboxSidecarBuilder, SandboxTemplateRef, SandboxTemplateRefBuilder,
+    SchemaBuildError, VmTemplate, VmTemplateBuilder, WarmPoolAutoscaling,
+    WarmPoolAutoscalingBuilder,
 };
 
 #[test]
@@ -106,7 +107,14 @@ fn autoscaling_builder_supports_empty_and_immutable_optional_values() {
 }
 
 #[test]
-fn vm_template_builder_sets_env_command_args_and_process_mode() {
+fn vm_template_builder_sets_env_command_args_and_sidecars() {
+    let sidecar: SandboxSidecar = SandboxSidecarBuilder::new()
+        .name("redis".into())
+        .image("redis:7".into())
+        .args(vec!["--save".into(), "".into()])
+        .ports(vec![6379])
+        .build()
+        .unwrap();
     let vm: VmTemplate = VmTemplateBuilder::new()
         .container_disk_image("python:3.12-slim".into())
         .command(vec!["python".into(), "-m".into(), "server".into()])
@@ -115,6 +123,7 @@ fn vm_template_builder_sets_env_command_args_and_process_mode() {
             "FOO".into(),
             "bar".into(),
         )]))
+        .sidecars(vec![sidecar.clone()])
         .process_mode(ProcessMode::Run)
         .build()
         .unwrap();
@@ -124,5 +133,14 @@ fn vm_template_builder_sets_env_command_args_and_process_mode() {
         Some(&["--port".to_string(), "8765".to_string()][..])
     );
     assert_eq!(vm.env.as_ref().unwrap()["FOO"], "bar");
+    assert_eq!(vm.sidecars, Some(vec![sidecar]));
     assert_eq!(vm.process_mode, Some(ProcessMode::Run));
+    assert_eq!(
+        SandboxSidecarBuilder::new()
+            .name("x".into())
+            .build()
+            .unwrap_err()
+            .to_string(),
+        "SandboxSidecar is missing required field image"
+    );
 }

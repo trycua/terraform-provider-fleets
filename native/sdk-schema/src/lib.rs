@@ -11,9 +11,10 @@ pub use claim::{
     OSGymSandboxClaimSandbox, OSGymSandboxClaimStatus,
 };
 pub use common::{
-    Firmware, ImagePullPolicy, OidcConfig, ProcessMode, REGISTRY_SECRET_NAME_PREFIX, RuntimeKind,
-    SHARED_ECR_PULL_SECRET, SandboxService, SandboxServiceBuilder, ServiceProtocol, VmTemplate,
-    VmTemplateBuilder,
+    DEFAULT_SIDECAR_CPU, DEFAULT_SIDECAR_MEMORY, Firmware, ImagePullPolicy, MAIN_CONTAINER_NAME,
+    OidcConfig, ProcessMode, REGISTRY_SECRET_NAME_PREFIX, RuntimeKind, SHARED_ECR_PULL_SECRET,
+    SIDECAR_NAME_PATTERN, SandboxService, SandboxServiceBuilder, SandboxSidecar,
+    SandboxSidecarBuilder, ServiceProtocol, VmTemplate, VmTemplateBuilder,
 };
 pub use common::{SandboxTemplateRef, SandboxTemplateRefBuilder};
 pub use json::{JsonValueError, PreservedJson};

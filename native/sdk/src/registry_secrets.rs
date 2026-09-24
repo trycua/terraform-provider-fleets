@@ -9,8 +9,8 @@
 //! cannot be read back, and "update" is delete + create.
 //!
 //! Reference the Secret from `vmTemplate.imagePullSecret`; the pod runtimes
-//! put it in the pod's `imagePullSecrets` and KubeVirt uses it for the
-//! containerDisk pull.
+//! put it in the pod's `imagePullSecrets` (sidecar images included) and
+//! KubeVirt uses it for the containerDisk pull.
 
 use crate::{CyclopsClient, HttpHeader, HttpRequest, SdkError, routes};
 use base64::{Engine, engine::general_purpose::STANDARD};

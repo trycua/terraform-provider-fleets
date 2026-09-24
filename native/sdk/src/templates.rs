@@ -145,7 +145,7 @@ fn template_merge_patch_json(template: &Template) -> Result<Vec<u8>, SdkError> {
     })?;
     // The same explicit null clears the optional process and delivery fields a
     // desired spec drops (Terraform removing `command`, say, or a reconcile
-    // without env/args/processMode); a merge patch would otherwise keep them.
+    // without env/args/sidecars/processMode); a merge patch would otherwise keep them.
     let vm_template = &template.spec.vm_template;
     for (key, absent) in [
         ("imagePullSecret", vm_template.image_pull_secret.is_none()),
@@ -154,6 +154,7 @@ fn template_merge_patch_json(template: &Template) -> Result<Vec<u8>, SdkError> {
         ("claimSecrets", vm_template.claim_secrets.is_none()),
         ("args", vm_template.args.is_none()),
         ("env", vm_template.env.is_none()),
+        ("sidecars", vm_template.sidecars.is_none()),
         ("processMode", vm_template.process_mode.is_none()),
     ] {
         if absent {

@@ -1342,6 +1342,75 @@ func (_ FfiDestroyerSandboxService) Destroy(value SandboxService) {
 	value.Destroy()
 }
 
+// One extra container next to a sandbox (`vmTemplate.sidecars`).
+type SandboxSidecar struct {
+	Name    string
+	Image   string
+	Command *[]string
+	Args    *[]string
+	Env     *map[string]string
+	Ports   *[]uint16
+	Cpu     *string
+	Memory  *string
+}
+
+func (r *SandboxSidecar) Destroy() {
+	FfiDestroyerString{}.Destroy(r.Name)
+	FfiDestroyerString{}.Destroy(r.Image)
+	FfiDestroyerOptionalSequenceString{}.Destroy(r.Command)
+	FfiDestroyerOptionalSequenceString{}.Destroy(r.Args)
+	FfiDestroyerOptionalMapStringString{}.Destroy(r.Env)
+	FfiDestroyerOptionalSequenceUint16{}.Destroy(r.Ports)
+	FfiDestroyerOptionalString{}.Destroy(r.Cpu)
+	FfiDestroyerOptionalString{}.Destroy(r.Memory)
+}
+
+type FfiConverterSandboxSidecar struct{}
+
+var FfiConverterSandboxSidecarINSTANCE = FfiConverterSandboxSidecar{}
+
+func (c FfiConverterSandboxSidecar) Lift(rb RustBufferI) SandboxSidecar {
+	return LiftFromRustBuffer[SandboxSidecar](c, rb)
+}
+
+func (c FfiConverterSandboxSidecar) Read(reader io.Reader) SandboxSidecar {
+	return SandboxSidecar{
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterOptionalSequenceStringINSTANCE.Read(reader),
+		FfiConverterOptionalSequenceStringINSTANCE.Read(reader),
+		FfiConverterOptionalMapStringStringINSTANCE.Read(reader),
+		FfiConverterOptionalSequenceUint16INSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterSandboxSidecar) Lower(value SandboxSidecar) C.RustBuffer {
+	return LowerIntoRustBuffer[SandboxSidecar](c, value)
+}
+
+func (c FfiConverterSandboxSidecar) LowerExternal(value SandboxSidecar) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[SandboxSidecar](c, value))
+}
+
+func (c FfiConverterSandboxSidecar) Write(writer io.Writer, value SandboxSidecar) {
+	FfiConverterStringINSTANCE.Write(writer, value.Name)
+	FfiConverterStringINSTANCE.Write(writer, value.Image)
+	FfiConverterOptionalSequenceStringINSTANCE.Write(writer, value.Command)
+	FfiConverterOptionalSequenceStringINSTANCE.Write(writer, value.Args)
+	FfiConverterOptionalMapStringStringINSTANCE.Write(writer, value.Env)
+	FfiConverterOptionalSequenceUint16INSTANCE.Write(writer, value.Ports)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.Cpu)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.Memory)
+}
+
+type FfiDestroyerSandboxSidecar struct{}
+
+func (_ FfiDestroyerSandboxSidecar) Destroy(value SandboxSidecar) {
+	value.Destroy()
+}
+
 type SandboxTemplateRef struct {
 	Name string
 }
@@ -1401,6 +1470,7 @@ type VmTemplate struct {
 	ClaimSecrets         *bool
 	Args                 *[]string
 	Env                  *map[string]string
+	Sidecars             *[]SandboxSidecar
 	ProcessMode          *ProcessMode
 }
 
@@ -1423,6 +1493,7 @@ func (r *VmTemplate) Destroy() {
 	FfiDestroyerOptionalBool{}.Destroy(r.ClaimSecrets)
 	FfiDestroyerOptionalSequenceString{}.Destroy(r.Args)
 	FfiDestroyerOptionalMapStringString{}.Destroy(r.Env)
+	FfiDestroyerOptionalSequenceSandboxSidecar{}.Destroy(r.Sidecars)
 	FfiDestroyerOptionalProcessMode{}.Destroy(r.ProcessMode)
 }
 
@@ -1454,6 +1525,7 @@ func (c FfiConverterVmTemplate) Read(reader io.Reader) VmTemplate {
 		FfiConverterOptionalBoolINSTANCE.Read(reader),
 		FfiConverterOptionalSequenceStringINSTANCE.Read(reader),
 		FfiConverterOptionalMapStringStringINSTANCE.Read(reader),
+		FfiConverterOptionalSequenceSandboxSidecarINSTANCE.Read(reader),
 		FfiConverterOptionalProcessModeINSTANCE.Read(reader),
 	}
 }
@@ -1485,6 +1557,7 @@ func (c FfiConverterVmTemplate) Write(writer io.Writer, value VmTemplate) {
 	FfiConverterOptionalBoolINSTANCE.Write(writer, value.ClaimSecrets)
 	FfiConverterOptionalSequenceStringINSTANCE.Write(writer, value.Args)
 	FfiConverterOptionalMapStringStringINSTANCE.Write(writer, value.Env)
+	FfiConverterOptionalSequenceSandboxSidecarINSTANCE.Write(writer, value.Sidecars)
 	FfiConverterOptionalProcessModeINSTANCE.Write(writer, value.ProcessMode)
 }
 
@@ -2607,6 +2680,47 @@ func (_ FfiDestroyerOptionalWarmPoolTtlPolicy) Destroy(value *WarmPoolTtlPolicy)
 	}
 }
 
+type FfiConverterOptionalSequenceUint16 struct{}
+
+var FfiConverterOptionalSequenceUint16INSTANCE = FfiConverterOptionalSequenceUint16{}
+
+func (c FfiConverterOptionalSequenceUint16) Lift(rb RustBufferI) *[]uint16 {
+	return LiftFromRustBuffer[*[]uint16](c, rb)
+}
+
+func (_ FfiConverterOptionalSequenceUint16) Read(reader io.Reader) *[]uint16 {
+	if readInt8(reader) == 0 {
+		return nil
+	}
+	temp := FfiConverterSequenceUint16INSTANCE.Read(reader)
+	return &temp
+}
+
+func (c FfiConverterOptionalSequenceUint16) Lower(value *[]uint16) C.RustBuffer {
+	return LowerIntoRustBuffer[*[]uint16](c, value)
+}
+
+func (c FfiConverterOptionalSequenceUint16) LowerExternal(value *[]uint16) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[*[]uint16](c, value))
+}
+
+func (_ FfiConverterOptionalSequenceUint16) Write(writer io.Writer, value *[]uint16) {
+	if value == nil {
+		writeInt8(writer, 0)
+	} else {
+		writeInt8(writer, 1)
+		FfiConverterSequenceUint16INSTANCE.Write(writer, *value)
+	}
+}
+
+type FfiDestroyerOptionalSequenceUint16 struct{}
+
+func (_ FfiDestroyerOptionalSequenceUint16) Destroy(value *[]uint16) {
+	if value != nil {
+		FfiDestroyerSequenceUint16{}.Destroy(*value)
+	}
+}
+
 type FfiConverterOptionalSequenceString struct{}
 
 var FfiConverterOptionalSequenceStringINSTANCE = FfiConverterOptionalSequenceString{}
@@ -2771,6 +2885,47 @@ func (_ FfiDestroyerOptionalSequenceSandboxService) Destroy(value *[]SandboxServ
 	}
 }
 
+type FfiConverterOptionalSequenceSandboxSidecar struct{}
+
+var FfiConverterOptionalSequenceSandboxSidecarINSTANCE = FfiConverterOptionalSequenceSandboxSidecar{}
+
+func (c FfiConverterOptionalSequenceSandboxSidecar) Lift(rb RustBufferI) *[]SandboxSidecar {
+	return LiftFromRustBuffer[*[]SandboxSidecar](c, rb)
+}
+
+func (_ FfiConverterOptionalSequenceSandboxSidecar) Read(reader io.Reader) *[]SandboxSidecar {
+	if readInt8(reader) == 0 {
+		return nil
+	}
+	temp := FfiConverterSequenceSandboxSidecarINSTANCE.Read(reader)
+	return &temp
+}
+
+func (c FfiConverterOptionalSequenceSandboxSidecar) Lower(value *[]SandboxSidecar) C.RustBuffer {
+	return LowerIntoRustBuffer[*[]SandboxSidecar](c, value)
+}
+
+func (c FfiConverterOptionalSequenceSandboxSidecar) LowerExternal(value *[]SandboxSidecar) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[*[]SandboxSidecar](c, value))
+}
+
+func (_ FfiConverterOptionalSequenceSandboxSidecar) Write(writer io.Writer, value *[]SandboxSidecar) {
+	if value == nil {
+		writeInt8(writer, 0)
+	} else {
+		writeInt8(writer, 1)
+		FfiConverterSequenceSandboxSidecarINSTANCE.Write(writer, *value)
+	}
+}
+
+type FfiDestroyerOptionalSequenceSandboxSidecar struct{}
+
+func (_ FfiDestroyerOptionalSequenceSandboxSidecar) Destroy(value *[]SandboxSidecar) {
+	if value != nil {
+		FfiDestroyerSequenceSandboxSidecar{}.Destroy(*value)
+	}
+}
+
 type FfiConverterOptionalMapStringString struct{}
 
 var FfiConverterOptionalMapStringStringINSTANCE = FfiConverterOptionalMapStringString{}
@@ -2809,6 +2964,53 @@ type FfiDestroyerOptionalMapStringString struct{}
 func (_ FfiDestroyerOptionalMapStringString) Destroy(value *map[string]string) {
 	if value != nil {
 		FfiDestroyerMapStringString{}.Destroy(*value)
+	}
+}
+
+type FfiConverterSequenceUint16 struct{}
+
+var FfiConverterSequenceUint16INSTANCE = FfiConverterSequenceUint16{}
+
+func (c FfiConverterSequenceUint16) Lift(rb RustBufferI) []uint16 {
+	return LiftFromRustBuffer[[]uint16](c, rb)
+}
+
+func (c FfiConverterSequenceUint16) Read(reader io.Reader) []uint16 {
+	length := readInt32(reader)
+	if length == 0 {
+		return nil
+	}
+	result := make([]uint16, 0, length)
+	for i := int32(0); i < length; i++ {
+		result = append(result, FfiConverterUint16INSTANCE.Read(reader))
+	}
+	return result
+}
+
+func (c FfiConverterSequenceUint16) Lower(value []uint16) C.RustBuffer {
+	return LowerIntoRustBuffer[[]uint16](c, value)
+}
+
+func (c FfiConverterSequenceUint16) LowerExternal(value []uint16) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[[]uint16](c, value))
+}
+
+func (c FfiConverterSequenceUint16) Write(writer io.Writer, value []uint16) {
+	if len(value) > math.MaxInt32 {
+		panic("[]uint16 is too large to fit into Int32")
+	}
+
+	writeInt32(writer, int32(len(value)))
+	for _, item := range value {
+		FfiConverterUint16INSTANCE.Write(writer, item)
+	}
+}
+
+type FfiDestroyerSequenceUint16 struct{}
+
+func (FfiDestroyerSequenceUint16) Destroy(sequence []uint16) {
+	for _, value := range sequence {
+		FfiDestroyerUint16{}.Destroy(value)
 	}
 }
 
@@ -2997,6 +3199,53 @@ type FfiDestroyerSequenceSandboxService struct{}
 func (FfiDestroyerSequenceSandboxService) Destroy(sequence []SandboxService) {
 	for _, value := range sequence {
 		FfiDestroyerSandboxService{}.Destroy(value)
+	}
+}
+
+type FfiConverterSequenceSandboxSidecar struct{}
+
+var FfiConverterSequenceSandboxSidecarINSTANCE = FfiConverterSequenceSandboxSidecar{}
+
+func (c FfiConverterSequenceSandboxSidecar) Lift(rb RustBufferI) []SandboxSidecar {
+	return LiftFromRustBuffer[[]SandboxSidecar](c, rb)
+}
+
+func (c FfiConverterSequenceSandboxSidecar) Read(reader io.Reader) []SandboxSidecar {
+	length := readInt32(reader)
+	if length == 0 {
+		return nil
+	}
+	result := make([]SandboxSidecar, 0, length)
+	for i := int32(0); i < length; i++ {
+		result = append(result, FfiConverterSandboxSidecarINSTANCE.Read(reader))
+	}
+	return result
+}
+
+func (c FfiConverterSequenceSandboxSidecar) Lower(value []SandboxSidecar) C.RustBuffer {
+	return LowerIntoRustBuffer[[]SandboxSidecar](c, value)
+}
+
+func (c FfiConverterSequenceSandboxSidecar) LowerExternal(value []SandboxSidecar) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[[]SandboxSidecar](c, value))
+}
+
+func (c FfiConverterSequenceSandboxSidecar) Write(writer io.Writer, value []SandboxSidecar) {
+	if len(value) > math.MaxInt32 {
+		panic("[]SandboxSidecar is too large to fit into Int32")
+	}
+
+	writeInt32(writer, int32(len(value)))
+	for _, item := range value {
+		FfiConverterSandboxSidecarINSTANCE.Write(writer, item)
+	}
+}
+
+type FfiDestroyerSequenceSandboxSidecar struct{}
+
+func (FfiDestroyerSequenceSandboxSidecar) Destroy(sequence []SandboxSidecar) {
+	for _, value := range sequence {
+		FfiDestroyerSandboxSidecar{}.Destroy(value)
 	}
 }
 
