@@ -399,12 +399,39 @@ func (m poolResourceModel) toSDKTemplateSpec(ctx context.Context, diagnostics *d
 			Runtime: runtime, ContainerDiskImage: m.ContainerDiskImage.ValueString(), ImagePullSecret: imagePullSecret,
 			CpuCores: &cpuCores, Memory: &memory, Firmware: firmware, Probes: probes, Services: &services,
 			Command:      configuredStrings(ctx, m.Command, diagnostics),
+			Args:         configuredStrings(ctx, m.Args, diagnostics),
+			Env:          configuredStringMap(ctx, m.Env, diagnostics),
+			ProcessMode:  configuredProcessMode(m.ProcessMode),
 			ClaimSecrets: configuredBool(m.ClaimSecrets),
 		},
 	}
 }
 
-func configuredImagePullSecret(value types.String) *string {
+func configuredStringMap(ctx context.Context, value types.Map, diagnostics *diag.Diagnostics) *map[string]string {
+	if value.IsNull() || value.IsUnknown() {
+		return nil
+	}
+	configured := map[string]string{}
+	diagnostics.Append(value.ElementsAs(ctx, &configured, false)...)
+	return &configured
+}
+
+func configuredProcessMode(value types.String) *cyclops_sdk_schema.ProcessMode {
+	var mode cyclops_sdk_schema.ProcessMode
+	switch {
+	case value.IsNull() || value.IsUnknown():
+		return nil
+	case value.ValueString() == "Run":
+		mode = cyclops_sdk_schema.ProcessModeRun
+	default:
+		mode = cyclops_sdk_schema.ProcessModeLegacy
+	}
+	return &mode
+}
+
+func configuredImagePullSecret(value types.String) *string { return configuredString(value) }
+
+func configuredString(value types.String) *string {
 	if value.IsNull() || value.IsUnknown() {
 		return nil
 	}
@@ -461,6 +488,9 @@ func (m poolResourceModel) templateAttributesEqual(other poolResourceModel) bool
 		m.ReadinessProbeJSON.Equal(other.ReadinessProbeJSON) &&
 		m.LivenessProbeJSON.Equal(other.LivenessProbeJSON) &&
 		m.Command.Equal(other.Command) &&
+		m.Args.Equal(other.Args) &&
+		m.Env.Equal(other.Env) &&
+		m.ProcessMode.Equal(other.ProcessMode) &&
 		m.ClaimSecrets.Equal(other.ClaimSecrets) &&
 		m.Services.Equal(other.Services)
 }
@@ -514,6 +544,9 @@ func (m *poolResourceModel) fromSDKTemplate(ctx context.Context, template *fleet
 	}
 	m.Runtime = types.StringValue(runtimeString(vmTemplate.Runtime))
 	m.Command = stringListValue(vmTemplate.Command, diagnostics)
+	m.Args = stringListValue(vmTemplate.Args, diagnostics)
+	m.Env = stringMapValue(vmTemplate.Env, diagnostics)
+	m.ProcessMode = processModeValue(vmTemplate.ProcessMode)
 	if vmTemplate.ClaimSecrets == nil {
 		m.ClaimSecrets = types.BoolNull()
 	} else {
@@ -586,6 +619,30 @@ func stringListValue(value *[]string, diagnostics *diag.Diagnostics) types.List 
 	list, diags := types.ListValue(types.StringType, elements)
 	diagnostics.Append(diags...)
 	return list
+}
+
+func stringMapValue(value *map[string]string, diagnostics *diag.Diagnostics) types.Map {
+	if value == nil {
+		return types.MapNull(types.StringType)
+	}
+	elements := make(map[string]attr.Value, len(*value))
+	for key, item := range *value {
+		elements[key] = types.StringValue(item)
+	}
+	mapValue, diags := types.MapValue(types.StringType, elements)
+	diagnostics.Append(diags...)
+	return mapValue
+}
+
+func processModeValue(value *cyclops_sdk_schema.ProcessMode) types.String {
+	switch {
+	case value == nil:
+		return types.StringNull()
+	case *value == cyclops_sdk_schema.ProcessModeRun:
+		return types.StringValue("Run")
+	default:
+		return types.StringValue("Legacy")
+	}
 }
 
 func optionalString(value *string) string {

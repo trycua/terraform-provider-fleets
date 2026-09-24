@@ -106,6 +106,30 @@
       "crd_path": "spec.vmTemplate.command"
     },
     {
+      "name": "args",
+      "go_name": "Args",
+      "value_type": "string_list",
+      "mode": "optional",
+      "cr": "template",
+      "crd_path": "spec.vmTemplate.args"
+    },
+    {
+      "name": "env",
+      "go_name": "Env",
+      "value_type": "string_map",
+      "mode": "optional",
+      "cr": "template",
+      "crd_path": "spec.vmTemplate.env"
+    },
+    {
+      "name": "process_mode",
+      "go_name": "ProcessMode",
+      "value_type": "string",
+      "mode": "optional",
+      "cr": "template",
+      "crd_path": "spec.vmTemplate.processMode"
+    },
+    {
       "name": "claim_secrets",
       "go_name": "ClaimSecrets",
       "value_type": "bool",

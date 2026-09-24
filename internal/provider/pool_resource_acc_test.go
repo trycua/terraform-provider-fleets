@@ -155,7 +155,28 @@ provider "fleets" {
 					checkObjectField(dynamicClient, warmPoolGVR, "terraform-e2e", `{"autoscaling":{"initialPoolSize":1,"maxPoolSize":5,"minPoolSize":1},"idleTtlSeconds":86400,"replicas":1,"sandboxTemplateRef":{"name":"terraform-e2e-template"},"ttlPolicy":"Cascade","ttlSecondsAfterCreated":604800}`, "spec"),
 					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `["python","-m","http.server"]`, "spec", "vmTemplate", "command"),
 					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `true`, "spec", "vmTemplate", "claimSecrets"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "args.#", "3"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "env.FOO", "bar"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "env.EMPTY", ""),
+					resource.TestCheckResourceAttr("fleets_pool.test", "process_mode", "Run"),
+					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `["--bind","0.0.0.0","8765"]`, "spec", "vmTemplate", "args"),
+					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `{"EMPTY":"","FOO":"bar"}`, "spec", "vmTemplate", "env"),
+					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `"Run"`, "spec", "vmTemplate", "processMode"),
+					resource.TestCheckResourceAttr("fleets_registry_secret.ghcr", "id", "terraform-e2e/cua-registry-ghcr"),
+					checkRegistrySecret(clientset, "cua-registry-ghcr", "ghcr.io", "bot", "terraform-e2e-token"),
 				),
+			},
+			{
+				// A new password replaces the Secret (the gateway admits no
+				// update): delete, then create with the new credentials.
+				Config: providerConfig + strings.Replace(parityPoolConfig(), "terraform-e2e-token", "rotated-token", 1),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("fleets_registry_secret.ghcr", plancheck.ResourceActionReplace),
+						plancheck.ExpectResourceAction("fleets_pool.test", plancheck.ResourceActionNoop),
+					},
+				},
+				Check: checkRegistrySecret(clientset, "cua-registry-ghcr", "ghcr.io", "bot", "rotated-token"),
 			},
 			{
 				ResourceName:      "fleets_pool.test",
@@ -177,6 +198,14 @@ provider "fleets" {
 					checkObjectFieldAbsent(dynamicClient, warmPoolGVR, "terraform-e2e", "spec", "ttlSecondsAfterCreated"),
 					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "command"),
 					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "claimSecrets"),
+					resource.TestCheckNoResourceAttr("fleets_pool.test", "args.#"),
+					resource.TestCheckNoResourceAttr("fleets_pool.test", "env.%"),
+					resource.TestCheckNoResourceAttr("fleets_pool.test", "process_mode"),
+					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "args"),
+					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "env"),
+					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "processMode"),
+					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "imagePullSecret"),
+					checkRegistrySecretAbsent(clientset, "cua-registry-ghcr"),
 				),
 			},
 			{
@@ -439,6 +468,10 @@ resource "fleets_pool" "test" {
   memory                    = "24Gi"
   container_disk_image      = "example.invalid/cyclops/e2e:latest"
   command                   = ["python", "-m", "http.server"]
+  args                      = ["--bind", "0.0.0.0", "8765"]
+  env                       = { FOO = "bar", EMPTY = "" }
+  process_mode              = "Run"
+  image_pull_secret         = "cua-registry-ghcr"
   claim_secrets             = true
   idle_ttl_seconds          = 86400
   ttl_policy                = "Cascade"
@@ -455,6 +488,14 @@ resource "fleets_pool" "test" {
     target_port = 22
     protocol    = "TCP"
   }
+}
+
+resource "fleets_registry_secret" "ghcr" {
+  namespace = fleets_pool.test.namespace
+  name      = "cua-registry-ghcr"
+  registry  = "ghcr.io"
+  username  = "bot"
+  password  = "terraform-e2e-token"
 }
 `
 }
@@ -519,6 +560,37 @@ func newCyclopsTestServer(t *testing.T, clientset *kubernetes.Clientset, dynamic
 			name := strings.TrimPrefix(r.URL.Path, "/api/namespaces/")
 			err := clientset.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{})
 			writeKubernetesResult(w, http.StatusNoContent, nil, err)
+			return
+		}
+
+		// Tenant registry Secrets: like the gateway, only create and delete;
+		// any read is refused, so the provider must never need one.
+		const secretsPrefix = "/api/k8s/api/v1/namespaces/"
+		if strings.HasPrefix(r.URL.Path, secretsPrefix) {
+			parts := strings.Split(strings.TrimPrefix(r.URL.Path, secretsPrefix), "/")
+			if len(parts) < 2 || parts[1] != "secrets" {
+				http.NotFound(w, r)
+				return
+			}
+			secrets := clientset.CoreV1().Secrets(parts[0])
+			switch {
+			case r.Method == http.MethodPost && len(parts) == 2:
+				var secret corev1.Secret
+				if err := json.NewDecoder(r.Body).Decode(&secret); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				created, err := secrets.Create(ctx, &secret, metav1.CreateOptions{})
+				if err == nil {
+					created.Data = nil
+				}
+				writeKubernetesResult(w, http.StatusCreated, created, err)
+			case r.Method == http.MethodDelete && len(parts) == 3:
+				err := secrets.Delete(ctx, parts[2], metav1.DeleteOptions{})
+				writeKubernetesResult(w, http.StatusNoContent, nil, err)
+			default:
+				http.Error(w, "k8s request is not allowed", http.StatusForbidden)
+			}
 			return
 		}
 
@@ -604,6 +676,44 @@ func checkObjectField(dynamicClient dynamic.Interface, gvr schema.GroupVersionRe
 		wantJSON, _ := json.Marshal(wantValue)
 		if string(got) != string(wantJSON) {
 			return fmt.Errorf("%s %s %v = %s, want %s", gvr.Resource, name, fields, got, wantJSON)
+		}
+		return nil
+	}
+}
+
+// checkRegistrySecret reads the Secret straight from the apiserver and checks
+// the exact shape the gateway admits.
+func checkRegistrySecret(clientset kubernetes.Interface, name, registry, username, password string) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		secret, err := clientset.CoreV1().Secrets("terraform-e2e").Get(context.Background(), name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		if secret.Type != corev1.SecretTypeDockerConfigJson || secret.Labels["cua.ai/registry-secret"] != "true" {
+			return fmt.Errorf("secret type %q labels %v", secret.Type, secret.Labels)
+		}
+		var config struct {
+			Auths map[string]struct {
+				Username string `json:"username"`
+				Password string `json:"password"`
+			} `json:"auths"`
+		}
+		if err := json.Unmarshal(secret.Data[corev1.DockerConfigJsonKey], &config); err != nil {
+			return err
+		}
+		entry, ok := config.Auths[registry]
+		if !ok || entry.Username != username || entry.Password != password || len(config.Auths) != 1 {
+			return fmt.Errorf("dockerconfigjson does not hold the %s credentials for %s", username, registry)
+		}
+		return nil
+	}
+}
+
+func checkRegistrySecretAbsent(clientset kubernetes.Interface, name string) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		_, err := clientset.CoreV1().Secrets("terraform-e2e").Get(context.Background(), name, metav1.GetOptions{})
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("registry secret %s still exists (err %v)", name, err)
 		}
 		return nil
 	}
