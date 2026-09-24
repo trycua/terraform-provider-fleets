@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -41,6 +42,7 @@ type poolResourceModel struct {
 	CurrentReplicas        types.Int64          `tfsdk:"current_replicas"`
 	ReadyReplicas          types.Int64          `tfsdk:"ready_replicas"`
 	Services               types.Set            `tfsdk:"service"`
+	Sidecars               types.List           `tfsdk:"sidecar"`
 	Autoscaling            types.Object         `tfsdk:"autoscaling"`
 }
 
@@ -48,6 +50,17 @@ type serviceModel struct {
 	Name       types.String `tfsdk:"name"`
 	TargetPort types.Int64  `tfsdk:"target_port"`
 	Protocol   types.String `tfsdk:"protocol"`
+}
+
+type sidecarModel struct {
+	Name    types.String `tfsdk:"name"`
+	Image   types.String `tfsdk:"image"`
+	Command types.List   `tfsdk:"command"`
+	Args    types.List   `tfsdk:"args"`
+	Env     types.Map    `tfsdk:"env"`
+	Ports   types.List   `tfsdk:"ports"`
+	CPU     types.String `tfsdk:"cpu"`
+	Memory  types.String `tfsdk:"memory"`
 }
 
 type autoscalingModel struct {
@@ -89,6 +102,16 @@ func poolResourceSchema() schema.Schema {
 				"target_port": schema.Int64Attribute{Required: true, Description: "Port on the VM pod to forward to.", Validators: []validator.Int64{int64validator.Between(1, 65535)}},
 				"protocol":    schema.StringAttribute{Optional: true, Computed: true, Validators: []validator.String{stringvalidator.OneOf("TCP", "UDP")}},
 			}}},
+			"sidecar": schema.ListNestedBlock{NestedObject: schema.NestedBlockObject{Attributes: map[string]schema.Attribute{
+				"name":    schema.StringAttribute{Required: true, Description: "Container name, a DNS label unique within the sandbox. \"main\" is reserved for the sandbox container.", Validators: []validator.String{stringvalidator.LengthBetween(1, 63), stringvalidator.RegexMatches(dnsLabelRegex, "must be a lowercase DNS label")}},
+				"image":   schema.StringAttribute{Required: true, Description: "Container image ref (same admission rules as containerDiskImage)."},
+				"command": schema.ListAttribute{Optional: true, ElementType: types.StringType, Description: "Entrypoint override (replaces the image ENTRYPOINT)."},
+				"args":    schema.ListAttribute{Optional: true, ElementType: types.StringType, Description: "Arguments (replace the image CMD)."},
+				"env":     schema.MapAttribute{Optional: true, ElementType: types.StringType, Description: "Plain environment variables (not for secrets)."},
+				"ports":   schema.ListAttribute{Optional: true, ElementType: types.Int64Type, Description: "TCP ports the sidecar listens on. The sandbox reaches the sidecar by name on these ports on every runtime (KubeVirt exposes only these), and vmTemplate.services may target them like any port of the main container.", Validators: []validator.List{listvalidator.ValueInt64sAre(int64validator.Between(1, 65535))}},
+				"cpu":     schema.StringAttribute{Optional: true, Description: "CPU request and limit, a Kubernetes quantity (default 500m). Requests equal limits so the sandbox pod keeps Guaranteed QoS."},
+				"memory":  schema.StringAttribute{Optional: true, Description: "Memory request and limit, a Kubernetes quantity (default 512Mi)."},
+			}}},
 			"autoscaling": schema.SingleNestedBlock{Attributes: map[string]schema.Attribute{
 				"min_pool_size":     schema.Int64Attribute{Optional: true, Computed: true, Description: "ScaledObject minReplicaCount — the durable warm\nfloor kept while the extension is enabled. 0 lets\nthe pool scale to zero when there are no claims.", Validators: []validator.Int64{int64validator.AtLeast(0)}},
 				"initial_pool_size": schema.Int64Attribute{Optional: true, Computed: true, Description: "One-time warm head-start: the pool-operator seeds\nspec.replicas to this when the pool is created so\nthe first claims bind without a cold start. KEDA\nthen owns spec.replicas; the value decays toward\nthe live claim demand (floored at minPoolSize)\nonce KEDA begins polling.", Validators: []validator.Int64{int64validator.AtLeast(0)}},
@@ -100,6 +123,10 @@ func poolResourceSchema() schema.Schema {
 
 func serviceObjectType() map[string]attr.Type {
 	return map[string]attr.Type{"name": types.StringType, "target_port": types.Int64Type, "protocol": types.StringType}
+}
+
+func sidecarObjectType() map[string]attr.Type {
+	return map[string]attr.Type{"name": types.StringType, "image": types.StringType, "command": types.ListType{ElemType: types.StringType}, "args": types.ListType{ElemType: types.StringType}, "env": types.MapType{ElemType: types.StringType}, "ports": types.ListType{ElemType: types.Int64Type}, "cpu": types.StringType, "memory": types.StringType}
 }
 
 func autoscalingObjectType() map[string]attr.Type {

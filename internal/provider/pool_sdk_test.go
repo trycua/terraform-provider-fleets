@@ -30,6 +30,7 @@ func examplePoolModel() poolResourceModel {
 		Args:               types.ListNull(types.StringType),
 		Env:                types.MapNull(types.StringType),
 		ProcessMode:        types.StringNull(),
+		Sidecars:           types.ListValueMust(types.ObjectType{AttrTypes: sidecarObjectType()}, []attr.Value{}),
 		ClaimSecrets:       types.BoolNull(),
 		// Lifecycle attributes default to null: what a pool created before
 		// they existed reads back as.

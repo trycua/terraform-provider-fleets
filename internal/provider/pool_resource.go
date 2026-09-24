@@ -402,6 +402,7 @@ func (m poolResourceModel) toSDKTemplateSpec(ctx context.Context, diagnostics *d
 			Args:         configuredStrings(ctx, m.Args, diagnostics),
 			Env:          configuredStringMap(ctx, m.Env, diagnostics),
 			ProcessMode:  configuredProcessMode(m.ProcessMode),
+			Sidecars:     m.toSDKSidecars(ctx, diagnostics),
 			ClaimSecrets: configuredBool(m.ClaimSecrets),
 		},
 	}
@@ -427,6 +428,40 @@ func configuredProcessMode(value types.String) *cyclops_sdk_schema.ProcessMode {
 		mode = cyclops_sdk_schema.ProcessModeLegacy
 	}
 	return &mode
+}
+
+// toSDKSidecars omits sidecars entirely when no sidecar block is configured,
+// so templates without sidecars keep the exact spec they had.
+func (m poolResourceModel) toSDKSidecars(ctx context.Context, diagnostics *diag.Diagnostics) *[]cyclops_sdk_schema.SandboxSidecar {
+	if m.Sidecars.IsNull() || m.Sidecars.IsUnknown() || len(m.Sidecars.Elements()) == 0 {
+		return nil
+	}
+	var values []sidecarModel
+	diagnostics.Append(m.Sidecars.ElementsAs(ctx, &values, false)...)
+	sidecars := make([]cyclops_sdk_schema.SandboxSidecar, 0, len(values))
+	for _, value := range values {
+		var ports *[]uint16
+		if !value.Ports.IsNull() && !value.Ports.IsUnknown() {
+			var configured []int64
+			diagnostics.Append(value.Ports.ElementsAs(ctx, &configured, false)...)
+			converted := make([]uint16, 0, len(configured))
+			for _, port := range configured {
+				converted = append(converted, uint16(port))
+			}
+			ports = &converted
+		}
+		sidecars = append(sidecars, cyclops_sdk_schema.SandboxSidecar{
+			Name:    value.Name.ValueString(),
+			Image:   value.Image.ValueString(),
+			Command: configuredStrings(ctx, value.Command, diagnostics),
+			Args:    configuredStrings(ctx, value.Args, diagnostics),
+			Env:     configuredStringMap(ctx, value.Env, diagnostics),
+			Ports:   ports,
+			Cpu:     configuredString(value.CPU),
+			Memory:  configuredString(value.Memory),
+		})
+	}
+	return &sidecars
 }
 
 func configuredImagePullSecret(value types.String) *string { return configuredString(value) }
@@ -491,6 +526,7 @@ func (m poolResourceModel) templateAttributesEqual(other poolResourceModel) bool
 		m.Args.Equal(other.Args) &&
 		m.Env.Equal(other.Env) &&
 		m.ProcessMode.Equal(other.ProcessMode) &&
+		m.Sidecars.Equal(other.Sidecars) &&
 		m.ClaimSecrets.Equal(other.ClaimSecrets) &&
 		m.Services.Equal(other.Services)
 }
@@ -547,6 +583,7 @@ func (m *poolResourceModel) fromSDKTemplate(ctx context.Context, template *fleet
 	m.Args = stringListValue(vmTemplate.Args, diagnostics)
 	m.Env = stringMapValue(vmTemplate.Env, diagnostics)
 	m.ProcessMode = processModeValue(vmTemplate.ProcessMode)
+	m.Sidecars = sidecarsValue(vmTemplate.Sidecars, diagnostics)
 	if vmTemplate.ClaimSecrets == nil {
 		m.ClaimSecrets = types.BoolNull()
 	} else {
@@ -643,6 +680,49 @@ func processModeValue(value *cyclops_sdk_schema.ProcessMode) types.String {
 	default:
 		return types.StringValue("Legacy")
 	}
+}
+
+func optionalStringValue(value *string) types.String {
+	if value == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(*value)
+}
+
+// sidecarsValue reads no sidecars as an empty list, which is what a
+// configuration without sidecar blocks plans.
+func sidecarsValue(value *[]cyclops_sdk_schema.SandboxSidecar, diagnostics *diag.Diagnostics) types.List {
+	sidecarType := types.ObjectType{AttrTypes: sidecarObjectType()}
+	elements := []attr.Value{}
+	if value != nil {
+		for _, sidecar := range *value {
+			ports := types.ListNull(types.Int64Type)
+			if sidecar.Ports != nil {
+				portValues := make([]attr.Value, 0, len(*sidecar.Ports))
+				for _, port := range *sidecar.Ports {
+					portValues = append(portValues, types.Int64Value(int64(port)))
+				}
+				list, diags := types.ListValue(types.Int64Type, portValues)
+				diagnostics.Append(diags...)
+				ports = list
+			}
+			object, diags := types.ObjectValue(sidecarObjectType(), map[string]attr.Value{
+				"name":    types.StringValue(sidecar.Name),
+				"image":   types.StringValue(sidecar.Image),
+				"command": stringListValue(sidecar.Command, diagnostics),
+				"args":    stringListValue(sidecar.Args, diagnostics),
+				"env":     stringMapValue(sidecar.Env, diagnostics),
+				"ports":   ports,
+				"cpu":     optionalStringValue(sidecar.Cpu),
+				"memory":  optionalStringValue(sidecar.Memory),
+			})
+			diagnostics.Append(diags...)
+			elements = append(elements, object)
+		}
+	}
+	list, diags := types.ListValue(sidecarType, elements)
+	diagnostics.Append(diags...)
+	return list
 }
 
 func optionalString(value *string) string {

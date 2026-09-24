@@ -62,8 +62,8 @@ resource "fleets_pool" "public_gvisor" {
 
 `cua fleet pool export --terraform` prints this shape for a pool made with
 `Sandbox.create` or `Pool.apply`: a process that runs on every runtime, a
-private-registry image, claim-scoped secrets, a warm floor of one, and
-lifecycle TTLs.
+sidecar, a private-registry image, claim-scoped secrets, a warm floor of one,
+and lifecycle TTLs.
 
 ```terraform
 resource "fleets_pool" "agent" {
@@ -86,6 +86,12 @@ resource "fleets_pool" "agent" {
     min_pool_size     = 1
     initial_pool_size = 1
     max_pool_size     = 20
+  }
+
+  sidecar {
+    name  = "redis"
+    image = "redis:7"
+    ports = [6379]
   }
 
   service {
@@ -118,6 +124,7 @@ resource "fleets_registry_secret" "ghcr" {
 - `args` - Argument list (replaces the image CMD, follows `command`). On KubeVirt it needs `process_mode = "Run"` and a `command`.
 - `env` - Map of plain environment variables for the command. Values are stored in the template, so do not put secrets here; use `claim_secrets`. On KubeVirt it needs `process_mode = "Run"`.
 - `process_mode` - `Legacy` (the behavior when omitted) or `Run`. `Run` makes every runtime run `command`, `args` and `env` the same way; KubeVirt renders them into the guest's cloud-init (Linux guests with cloud-init and systemd).
+- `sidecar` - Repeatable extra container with `name` (DNS label, not `main`), `image`, and optional `command`, `args`, `env`, `ports`, `cpu`, `memory`. The sandbox reaches it at its name (on its declared `ports`) and it reaches the sandbox at `main`. Runs on every runtime: pod runtimes put it in the sandbox pod; KubeVirt runs it in a companion gVisor pod and names it in the guest's `/etc/hosts` (Linux guests with cloud-init).
 - `claim_secrets` - Opt in to claim-scoped secret delivery at `/run/cua` (the per-claim env token and a claim's `secretRef`). Claims with a `secretRef` fail on pools without it.
 - `idle_ttl_seconds` - Delete the pool after this many seconds with no Pending or Bound claims. Omit it to never reap for idleness.
 - `ttl_policy` - What a TTL expiry deletes: `Retain` (the pool only, the behavior when omitted) or `Cascade` (also the pool's dead unbound claims; never Bound claims, the namespace or volumes).
@@ -128,7 +135,7 @@ resource "fleets_registry_secret" "ghcr" {
 - `autoscaling.initial_pool_size` - Initial pool target when autoscaling starts.
 - `autoscaling.max_pool_size` - Maximum autoscaled pool size; defaults to `50` when omitted.
 
-Removing `command`, `args`, `env`, `process_mode`, `claim_secrets`, a probe or a lifecycle attribute from the
+Removing `command`, `args`, `env`, `process_mode`, a `sidecar`, `claim_secrets`, a probe or a lifecycle attribute from the
 configuration clears it from the Fleet object. A pool TTL that expires deletes
 the pool; the next apply creates it again.
 

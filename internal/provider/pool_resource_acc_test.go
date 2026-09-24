@@ -159,9 +159,13 @@ provider "fleets" {
 					resource.TestCheckResourceAttr("fleets_pool.test", "env.FOO", "bar"),
 					resource.TestCheckResourceAttr("fleets_pool.test", "env.EMPTY", ""),
 					resource.TestCheckResourceAttr("fleets_pool.test", "process_mode", "Run"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "sidecar.#", "2"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "sidecar.0.name", "redis"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "sidecar.1.command.0", "/proxy"),
 					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `["--bind","0.0.0.0","8765"]`, "spec", "vmTemplate", "args"),
 					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `{"EMPTY":"","FOO":"bar"}`, "spec", "vmTemplate", "env"),
 					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `"Run"`, "spec", "vmTemplate", "processMode"),
+					checkObjectField(dynamicClient, templateGVR, "terraform-e2e-template", `[{"args":["--save",""],"cpu":"250m","env":{"MODE":"cache"},"image":"redis:7","name":"redis","ports":[6379]},{"command":["/proxy"],"image":"example.invalid/proxy:1","name":"proxy"}]`, "spec", "vmTemplate", "sidecars"),
 					resource.TestCheckResourceAttr("fleets_registry_secret.ghcr", "id", "terraform-e2e/cua-registry-ghcr"),
 					checkRegistrySecret(clientset, "cua-registry-ghcr", "ghcr.io", "bot", "terraform-e2e-token"),
 				),
@@ -201,9 +205,11 @@ provider "fleets" {
 					resource.TestCheckNoResourceAttr("fleets_pool.test", "args.#"),
 					resource.TestCheckNoResourceAttr("fleets_pool.test", "env.%"),
 					resource.TestCheckNoResourceAttr("fleets_pool.test", "process_mode"),
+					resource.TestCheckResourceAttr("fleets_pool.test", "sidecar.#", "0"),
 					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "args"),
 					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "env"),
 					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "processMode"),
+					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "sidecars"),
 					checkObjectFieldAbsent(dynamicClient, templateGVR, "terraform-e2e-template", "spec", "vmTemplate", "imagePullSecret"),
 					checkRegistrySecretAbsent(clientset, "cua-registry-ghcr"),
 				),
@@ -481,6 +487,21 @@ resource "fleets_pool" "test" {
     min_pool_size     = 1
     initial_pool_size = 1
     max_pool_size     = 5
+  }
+
+  sidecar {
+    name  = "redis"
+    image = "redis:7"
+    args  = ["--save", ""]
+    env   = { MODE = "cache" }
+    ports = [6379]
+    cpu   = "250m"
+  }
+
+  sidecar {
+    name    = "proxy"
+    image   = "example.invalid/proxy:1"
+    command = ["/proxy"]
   }
 
   service {

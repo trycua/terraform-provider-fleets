@@ -222,6 +222,73 @@
       "go_name": "Services"
     },
     {
+      "name": "sidecar",
+      "model": "sidecarModel",
+      "collection": "list",
+      "cr": "template",
+      "crd_path": "spec.vmTemplate.sidecars",
+      "fields": [
+        {
+          "name": "name",
+          "go_name": "Name",
+          "value_type": "string",
+          "mode": "required",
+          "crd_path": "name",
+          "dns_label": true
+        },
+        {
+          "name": "image",
+          "go_name": "Image",
+          "value_type": "string",
+          "mode": "required",
+          "crd_path": "image"
+        },
+        {
+          "name": "command",
+          "go_name": "Command",
+          "value_type": "string_list",
+          "mode": "optional",
+          "crd_path": "command"
+        },
+        {
+          "name": "args",
+          "go_name": "Args",
+          "value_type": "string_list",
+          "mode": "optional",
+          "crd_path": "args"
+        },
+        {
+          "name": "env",
+          "go_name": "Env",
+          "value_type": "string_map",
+          "mode": "optional",
+          "crd_path": "env"
+        },
+        {
+          "name": "ports",
+          "go_name": "Ports",
+          "value_type": "int64_list",
+          "mode": "optional",
+          "crd_path": "ports"
+        },
+        {
+          "name": "cpu",
+          "go_name": "CPU",
+          "value_type": "string",
+          "mode": "optional",
+          "crd_path": "cpu"
+        },
+        {
+          "name": "memory",
+          "go_name": "Memory",
+          "value_type": "string",
+          "mode": "optional",
+          "crd_path": "memory"
+        }
+      ],
+      "go_name": "Sidecars"
+    },
+    {
       "name": "autoscaling",
       "model": "autoscalingModel",
       "collection": "single",

@@ -6,7 +6,7 @@ description: |-
 
 # fleets_registry_secret
 
-Creates a `kubernetes.io/dockerconfigjson` Secret named `cua-registry-<name>`, labeled `cua.ai/registry-secret: "true"`, in a pool namespace. Pods and KubeVirt use it to pull the pool's private images when `fleets_pool.image_pull_secret` names it.
+Creates a `kubernetes.io/dockerconfigjson` Secret named `cua-registry-<name>`, labeled `cua.ai/registry-secret: "true"`, in a pool namespace. Pods and KubeVirt use it to pull the pool's private images (sidecar images included) when `fleets_pool.image_pull_secret` names it.
 
 Fleet never returns Secret contents, so this resource is write-only:
 
