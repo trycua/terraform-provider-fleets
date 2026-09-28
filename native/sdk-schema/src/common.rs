@@ -11,6 +11,16 @@ pub(crate) fn bool_schema(generator: &mut schemars::SchemaGenerator) -> schemars
     bool::json_schema(generator)
 }
 
+/// A plain decimal with an optional Kubernetes suffix (4Gi, 512Mi, 1.5Gi,
+/// 8G, 2147483648). pool_admission.rego accepts the same forms and adds the
+/// 512Mi to 32Gi range the schema cannot express for a string.
+pub(crate) const MEMORY_QUANTITY_PATTERN: &str =
+    r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$";
+
+pub(crate) fn memory_quantity_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"type": "string", "pattern": MEMORY_QUANTITY_PATTERN})
+}
+
 pub(crate) fn integer_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
     schemars::json_schema!({"type": "integer"})
 }
@@ -306,12 +316,16 @@ pub struct VmTemplate {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(default)]
     pub image_pull_secret: Option<String>,
-    #[schemars(default = "default_cpu_cores", range(min = 1))]
+    // The maximum is an absolute backstop above every live template (the
+    // per-account 1-8 limit lives in pool_admission.rego, which admins and
+    // exempt accounts bypass). Raising a schema maximum is always safe;
+    // lowering one makes existing objects above it fail their next update.
+    #[schemars(default = "default_cpu_cores", range(min = 1, max = 64))]
     #[schemars(schema_with = "integer_schema")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_cores: Option<u32>,
     #[schemars(default = "default_memory")]
-    #[schemars(schema_with = "string_schema")]
+    #[schemars(schema_with = "memory_quantity_schema")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory: Option<String>,
     #[schemars(

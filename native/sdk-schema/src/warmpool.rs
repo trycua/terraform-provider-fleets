@@ -58,7 +58,7 @@ pub struct WarmPoolAutoscaling {
     #[schemars(
         default = "default_zero",
         schema_with = "integer_schema",
-        range(min = 0),
+        range(min = 0, max = 50),
         description = "ScaledObject minReplicaCount — the durable warm\nfloor kept while the extension is enabled. 0 lets\nthe pool scale to zero when there are no claims.\n"
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -66,7 +66,7 @@ pub struct WarmPoolAutoscaling {
     #[schemars(
         default = "default_zero",
         schema_with = "integer_schema",
-        range(min = 0),
+        range(min = 0, max = 50),
         description = "One-time warm head-start: the pool-operator seeds\nspec.replicas to this when the pool is created so\nthe first claims bind without a cold start. KEDA\nthen owns spec.replicas; the value decays toward\nthe live claim demand (floored at minPoolSize)\nonce KEDA begins polling.\n"
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,7 +74,7 @@ pub struct WarmPoolAutoscaling {
     #[schemars(
         default = "default_max_pool_size",
         schema_with = "integer_schema",
-        range(min = 1),
+        range(min = 1, max = 50),
         description = "ScaledObject maxReplicaCount — hard ceiling."
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,7 +119,7 @@ pub struct WarmPoolAutoscaling {
 pub struct OSGymSandboxWarmPoolSpec {
     #[schemars(
         schema_with = "integer_schema",
-        range(min = 0),
+        range(min = 0, max = 50),
         description = "Desired number of pre-warmed OSGymSandboxes."
     )]
     pub replicas: u32,
