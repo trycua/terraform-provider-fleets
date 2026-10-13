@@ -376,8 +376,14 @@ func (m poolResourceModel) toSDKTemplateSpec(ctx context.Context, diagnostics *d
 			})
 		}
 	}
+	// kubevirt and bios are the CRD defaults, but they still have to be sent
+	// when configured: an update is a merge patch, and leaving them out keeps
+	// whatever runtime or firmware the template had before.
 	var runtime *cyclops_sdk_schema.RuntimeKind
 	switch m.Runtime.ValueString() {
+	case "kubevirt":
+		value := cyclops_sdk_schema.RuntimeKindKubevirt
+		runtime = &value
 	case "macos":
 		value := cyclops_sdk_schema.RuntimeKindMacos
 		runtime = &value
@@ -386,7 +392,11 @@ func (m poolResourceModel) toSDKTemplateSpec(ctx context.Context, diagnostics *d
 		runtime = &value
 	}
 	var firmware *cyclops_sdk_schema.Firmware
-	if m.Firmware.ValueString() == "efi" {
+	switch m.Firmware.ValueString() {
+	case "bios":
+		value := cyclops_sdk_schema.FirmwareBios
+		firmware = &value
+	case "efi":
 		value := cyclops_sdk_schema.FirmwareEfi
 		firmware = &value
 	}
